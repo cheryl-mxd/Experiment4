@@ -33,17 +33,20 @@ import org.apache.hadoop.mapreduce.lib.map.*;
 public class task1 {
 
     public static class GoodsMapper extends Mapper<Object, Text, Text, IntWritable> {
-        private final static IntWritable one = new IntWritable(1);
+        //private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
+        private Set<String> user_merchant_pair = new TreeSet<String>();
 
         @Override
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
             String[] items = line.split(",");
+            String um_pair = items[0] + items[1];
             Pattern pattern = Pattern.compile("^[-\\+]?[\\d]*$");
-            if (items.length == 7 && !items[6].equals("0") && pattern.matcher(items[6]).matches()) {
+            if (items.length == 7 && !items[6].equals("0") && pattern.matcher(items[6]).matches() && items[5].equals("1111") && !user_merchant_pair.contains(um_pair)) {
+                user_merchant_pair.add(um_pair);
                 word.set(items[1]);
-                context.write(word, one);
+                context.write(word, new IntWritable(Integer.parseInt(items[6])));
             }
         }
     }
@@ -58,8 +61,6 @@ public class task1 {
             for (IntWritable val : values) {
                 sum += val.get();
             }
-            //result.set(sum);
-            //context.write(key, result);
             map.put(key.toString(), sum);
         }
 
@@ -85,6 +86,7 @@ public class task1 {
         private BufferedReader fis;
         private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
+        private Set<String> user_merchant_pair = new TreeSet<String>();
 
         //筛选得到30岁以下年轻人
         @Override
@@ -114,9 +116,11 @@ public class task1 {
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
             String[] items = line.split(",");
-            if (items.length == 7 && usrIds.contains(items[1])) {
+            String um_pair = items[0] + items[1];
+            if (items.length == 7 && usrIds.contains(items[1]) && !user_merchant_pair.contains(um_pair)) {
+                user_merchant_pair.add(um_pair);
                 word.set(items[3]);
-                context.write(word, one);
+                context.write(word, new IntWritable(Integer.parseInt(items[6])));
             }
         }
     }
@@ -205,7 +209,7 @@ public class task1 {
 
         //设置job依赖关系
         ctrljob2.addDependingJob(ctrljob1);
-        JobControl jobCtrl= new JobControl("my ctrl");
+        JobControl jobCtrl = new JobControl("my ctrl");
         jobCtrl.addJob(ctrljob1);
         jobCtrl.addJob(ctrljob2);
 
@@ -220,30 +224,5 @@ public class task1 {
                 break;
             }
         }
-
-        //System.exit(job1.waitForCompletion(true) ? 0 : 1);
-
-        /*
-        String InfoPath = "data/user_info_format1.csv";
-        String LogPath = "data/user_log_format1.csv";
-        BufferedReader readInfo = new BufferedReader(new FileReader(InfoPath));
-        BufferedReader readLog = new BufferedReader(new FileReader(LogPath));
-        readInfo.readLine();
-        String line = null;
-        int limit = 50000, i = 0;
-        while ((line = readInfo.readLine()) != null && i < limit) {
-            String item[] = line.split(",");
-            if (item.length < 2) {
-                continue;
-            }
-
-            String age = item[1], id = item[0];
-            if (age.equals("1") || age.equals("2") || age.equals("3") || age.equals("4")) {
-                System.out.println("id:" + id + "; age:" + age);
-                i++;
-            }
-        }
-        System.out.println("Count:" + i);
-        */
     }
 }
