@@ -8,36 +8,11 @@ import org.apache.spark.sql.{SQLContext, SparkSession, types}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.types._
+import org.apache.log4j.{Level, Logger}
 
-import scala.reflect.io.Path
-
-//case class User(user_id: String, item_id: String, cat_id: String, seller_id: String, brand_id: String, time_stamp: String, action_type: String)
-
-object SparkCount {
+object Count {
   def main(args: Array[String]): Unit = {
-    /*val conf = new SparkConf().setAppName("SparkCount").setMaster("local[*]")
-    val sc=new SparkContext(conf)
-    val sqlContext=new SQLContext(sc)
-
-    val inputpath = "data/user_log_format1.csv"
-    val outputpath = "out/out1"
-
-    val data=sqlContext.read.format("csv")
-      .option("header","true")
-      .option("nullValue","\\N")
-      .option("inferSchema", "true")
-      .schema(ScalaReflection.schemaFor[User].dataType.asInstanceOf[StructType])
-      .load(inputpath)
-    data.createTempView("user_log")
-
-    val df=data.toDF("user_id","item_id","cat_id","seller_id","brand_id","time_stamp","action_type")
-
-    val newdf=df.toDF("item_id","action_type")
-
-    newdf.show()
-    newdf.printSchema()
-
-    sc.stop()*/
+    Logger.getLogger("org").setLevel(Level.ERROR)
 
     val conf = new SparkConf().setAppName("SparkCount").setMaster("local[*]")
     val sc = new SparkContext(conf)
@@ -49,52 +24,37 @@ object SparkCount {
 
     val logrdd = sc.textFile(inputpath1)
     val header = logrdd.first
-    val log = logrdd.filter(line => {
-      line != header
-    })
+    val log = logrdd.filter(line => line != header) //去除标题
+      .map(line => line.split(",")) //分割行
+      .filter(line => line.length == 7) //删除缺失值
+      .filter(line=>line(5)=="1111")  //筛选双十一日志
+      .map(line=>(line(0),(line(1),line(2),line(3),line(4),line(5),line(6))))
 
     val infordd = sc.textFile(inputpath2)
     val header2 = infordd.first
-    val info = infordd.filter(line => {
-      line != header2
-    })
+    val info = infordd.filter(line => line != header2) //去除标题
+      .map(line => line.split(","))
+      .filter(line => line.length == 3)
+      .map(line=>(line(0),(line(1),line(2))))
 
-    val counts = log.filter(line => line.split(",")(6) != "0").map(line => line.split(",")(1))
-      .map(goods => (goods, 1))
-      .reduceByKey(_ + _)
-      .sortBy(_._2, false)
+    //统计双十一最热门的商品
+    val count1=log.map(line=>(line._2._1,line._2._6.toInt)) //转化为<item_id,action_type>形式
+      .reduceByKey(_+_)
+      .sortBy(_._2,false)
+      .map(line=>(line._1,line._2))
 
-    val result = sc.parallelize(counts.take(100))
+    val result1=sc.parallelize(count1.take(100))
+    result1.coalesce(1).saveAsTextFile(outputpath1)
 
-    //result.coalesce(1).saveAsTextFile(outputpath1)
+    val count2=log.join(info)
+      .filter(line=>line._2._2._1=="1"||line._2._2._1=="2"||line._2._2._1=="3") //筛选30岁以下的年轻人
+      .map(line=>(line._2._1._3,line._2._1._6.toInt))
+      .reduceByKey(_+_)
+      .sortBy(_._2,false)
+      .map(line=>(line._1,line._2))
 
-    val user_pair = info.filter(line => {
-      line.split(",")(1) == "1" || line.split(",")(1) == "2" || line.split(",")(1) == "3"
-    })
-      .map(line => (line.split(",")(0), line.split(",")(1)))
-
-    val out1 = sc.parallelize(user_pair.take(10))
-    //val out1 = sc.parallelize(user_pair.take(1000))
-    //println("user pair")
-    //out1.foreach(println)
-
-    val goods_pair = log.filter(line => line.split(",")(6) != "0")
-      .map(line => (line.split(",")(0), line.split(",")(3)))
-
-    val out2 = sc.parallelize(goods_pair.take(10))
-    //println("goods pair")
-    //out2.foreach(println)
-
-    goods_pair.rightOuterJoin(user_pair)
-    val join = goods_pair.values
-      .map(line => (line, 1))
-      .reduceByKey(_ + _)
-      .sortBy(_._2, false)
-    val out3 = sc.parallelize(join.take(100))
-    //println("joined pair")
-    //out3.foreach(println)
-
-    out3.coalesce(1).saveAsTextFile(outputpath2)
+    val result2=sc.parallelize(count2.take(100))
+    result2.coalesce(1).saveAsTextFile(outputpath2)
 
     sc.stop()
   }
